@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SuperCharge SG — Energy Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #1D9E75;
+    --green-dark: #085041;
+    --green-light: #E1F5EE;
+    --amber: #BA7517;
+    --amber-light: #FAEEDA;
+    --red: #A32D2D;
+    --red-light: #FCEBEB;
+    --text: #2C2C2A;
+    --muted: #5F5E5A;
+    --border: #D3D1C7;
+    --bg: #F6F5F0;
+    --card: #FFFFFF;
+    --sidebar-w: 220px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--green-dark);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 1rem;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 10;
+  }
+
+  .sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .sidebar-logo-icon {
+    width: 32px; height: 32px;
+    background: var(--green);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .sidebar-logo-text { font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .sidebar-logo-sub { font-size: 11px; opacity: 0.6; font-weight: 400; }
+
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 8px;
+    padding-left: 8px;
+  }
+
+  .site-list { list-style: none; margin-bottom: 2rem; }
+
+  .site-item {
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 2px;
+    transition: background 0.12s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .site-item:hover { background: rgba(255,255,255,0.1); }
+  .site-item.active { background: rgba(255,255,255,0.18); }
+
+  .sidebar-bottom {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .logout-btn {
+    background: none; border: none; color: white; font-size: 12px;
+    cursor: pointer; font-family: inherit; opacity: 0.7; margin-top: 6px;
+    padding: 0; text-decoration: underline;
+  }
+  .logout-btn:hover { opacity: 1; }
+
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    padding: 1.5rem;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+
+  .topbar-site-name { font-size: 20px; font-weight: 600; color: var(--green-dark); }
+  .topbar-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .topbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--green-dark); color: white; }
+  .btn-primary:hover { background: var(--green); }
+  .btn-secondary { background: white; color: var(--text); border-color: var(--border); }
+  .btn-secondary:hover { border-color: var(--green); color: var(--green-dark); }
+  .btn-danger { background: var(--red-light); color: var(--red); border-color: #F7C1C1; }
+  .btn-danger:hover { background: #F7C1C1; }
+
+  /* ── KPI cards row ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .kpi-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 1.2rem 1.2rem 1rem;
+    border: 1px solid var(--border);
+  }
+
+  .kpi-label { font-size: 12px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1; }
+  .kpi-unit { font-size: 13px; color: var(--muted); margin-left: 3px; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .kpi-card.green { border-left: 3px solid var(--green); }
+  .kpi-card.amber { border-left: 3px solid var(--amber); }
+  .kpi-card.red   { border-left: 3px solid var(--red); }
+
+  /* ── Charts grid ── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 900px) {
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 1.2rem;
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-title-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .badge-green { background: var(--green-light); color: var(--green-dark); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-amber { background: var(--amber-light); color: var(--amber); }
+
+  canvas { width: 100% !important; }
+
+  /* ── Anomaly + EV row ── */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 900px) {
+    .bottom-row { grid-template-columns: 1fr; }
+  }
+
+  .anomaly-list { list-style: none; }
+
+  .anomaly-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--bg);
+    font-size: 13px;
+  }
+
+  .anomaly-item:last-child { border-bottom: none; }
+
+  .severity-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .severity-dot.CRITICAL { background: var(--red); }
+  .severity-dot.WARNING  { background: var(--amber); }
+  .severity-dot.OK       { background: var(--green); }
+
+  .anomaly-ts { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* ── ECIS card ── */
+  .ecis-card { background: var(--green-light); border-radius: 12px; padding: 1.2rem; margin-top: 1rem; }
+  .ecis-title { font-size: 13px; font-weight: 600; color: var(--green-dark); margin-bottom: 0.8rem; }
+  .ecis-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .ecis-label { color: var(--muted); }
+  .ecis-val { font-weight: 600; color: var(--green-dark); }
+
+  /* ── Digest modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 560px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--green-dark);
+  }
+
+  .modal-body { font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap; }
+  .modal-close {
+    margin-top: 1.5rem;
+    background: var(--green-dark);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  /* ── Status ── */
+  .status-bar {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted); margin-bottom: 1rem;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .empty-state { text-align: center; padding: 2rem; color: var(--muted); font-size: 13px; }
+
+  /* ── EV table ── */
+  .ev-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ev-table th { text-align: left; font-weight: 500; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .ev-table td { padding: 6px 6px; border-bottom: 1px solid var(--bg); }
+  .ev-table tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">⚡</div>
+      <div>
+        <div class="sidebar-logo-text">SuperCharge SG</div>
+        <div class="sidebar-logo-sub">Energy Dashboard</div>
+      </div>
+    </div>
+    <div class="sidebar-label">Your Sites</div>
+    <ul class="site-list" id="site-list">
+      <li class="site-item" style="opacity:0.5">Loading…</li>
+    </ul>
+    <div class="sidebar-bottom">
+      <div id="user-email" style="margin-bottom:4px"></div>
+      <button class="logout-btn" onclick="logout()">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+    <div id="no-site" class="empty-state" style="margin-top:4rem">
+      <div style="font-size:2rem;margin-bottom:1rem">⚡</div>
+      <div>Select a site from the sidebar to get started.</div>
+    </div>
+
+    <div id="dashboard" style="display:none">
+      <!-- Top bar -->
+      <div class="topbar">
+        <div>
+          <div class="topbar-site-name" id="site-name">—</div>
+          <div class="topbar-meta" id="site-meta">—</div>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary" onclick="loadDigest()">📋 Weekly Digest</button>
+          <button class="btn btn-secondary" onclick="downloadPDF()">⬇ PDF Report</button>
+          <button class="btn btn-danger" onclick="injectFault()">⚠ Inject Fault</button>
+          <button class="btn btn-secondary" onclick="clearFault()">✓ Clear Fault</button>
+        </div>
+      </div>
+
+      <!-- Live status -->
+      <div class="status-bar">
+        <div class="status-dot"></div>
+        <span id="last-updated">Connecting…</span>
+        <span style="margin-left:auto;font-family:'DM Mono',monospace" id="live-power">—</span>
+      </div>
+
+      <!-- KPI row -->
+      <div class="kpi-row">
+        <div class="kpi-card green">
+          <div class="kpi-label">Solar Now</div>
+          <div class="kpi-value" id="kpi-power">—<span class="kpi-unit">kW</span></div>
+          <div class="kpi-sub" id="kpi-pr">—</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-label">Total Generated (30d)</div>
+          <div class="kpi-value" id="kpi-kwh">—<span class="kpi-unit">kWh</span></div>
+          <div class="kpi-sub">Last 30 days</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-label">ECIS Credits (30d)</div>
+          <div class="kpi-value">SGD <span id="kpi-ecis">—</span></div>
+          <div class="kpi-sub">@ SGD 0.218/kWh exported</div>
+        </div>
+        <div class="kpi-card amber">
+          <div class="kpi-label">Anomalies Detected</div>
+          <div class="kpi-value" id="kpi-anomalies">—</div>
+          <div class="kpi-sub" id="kpi-anomaly-last">—</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-title">
+            Solar Power Output (last 48 readings)
+            <span class="card-title-badge badge-green" id="chart-status">Live</span>
+          </div>
+          <canvas id="solar-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Performance Ratio</div>
+          <canvas id="pr-chart" height="180"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom row -->
+      <div class="bottom-row">
+        <!-- Anomaly log -->
+        <div class="card">
+          <div class="card-title">
+            Anomaly Log
+            <span class="card-title-badge badge-red" id="anomaly-badge" style="display:none">Active</span>
+          </div>
+          <ul class="anomaly-list" id="anomaly-list">
+            <li class="empty-state">No anomalies detected</li>
+          </ul>
+        </div>
+
+        <!-- EV sessions -->
+        <div class="card">
+          <div class="card-title">Recent EV Sessions</div>
+          <div id="ev-container">
+            <div class="empty-state">No sessions yet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ECIS tracker -->
+      <div class="ecis-card">
+        <div class="ecis-title">⚡ ECIS Export Credit Tracker (30-day)</div>
+        <div id="ecis-details">Loading…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Digest modal -->
+<div class="modal-overlay" id="digest-modal">
+  <div class="modal">
+    <div class="modal-title">📋 Weekly Energy Digest</div>
+    <div class="modal-body" id="digest-body">Generating…</div>
+    <button class="modal-close" onclick="document.getElementById('digest-modal').classList.remove('open')">Close</button>
+  </div>
+</div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────────────────────
+const token = localStorage.getItem('sc_token');
+if (!token) window.location.href = '/login.html';
+
+document.getElementById('user-email').textContent = localStorage.getItem('sc_email') || '';
+
+function logout() {
+  localStorage.removeItem('sc_token');
+  localStorage.removeItem('sc_email');
+  window.location.href = '/login.html';
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  if (res.status === 401) { logout(); return null; }
+  return res;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let currentSiteId = null;
+let solarChart = null;
+let prChart = null;
+let refreshInterval = null;
+
+// ── Sites ─────────────────────────────────────────────────────────────────
+async function loadSites() {
+  const res = await api('/api/sites');
+  if (!res) return;
+  const sites = await res.json();
+
+  const list = document.getElementById('site-list');
+  list.innerHTML = '';
+  sites.forEach(site => {
+    const li = document.createElement('li');
+    li.className = 'site-item';
+    li.textContent = site.name;
+    li.dataset.id = site.id;
+    li.onclick = () => selectSite(site);
+    list.appendChild(li);
+  });
+
+  if (sites.length > 0) selectSite(sites[0]);
+}
+
+function selectSite(site) {
+  currentSiteId = site.id;
+  document.querySelectorAll('.site-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === site.id);
+  });
+  document.getElementById('site-name').textContent = site.name;
+  document.getElementById('site-meta').textContent =
+    `${site.solar_kwp} kWp solar · ${site.charger_count} EV chargers`;
+  document.getElementById('no-site').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshData();
+  refreshInterval = setInterval(refreshData, 30000); // poll every 30s
+}
+
+// ── Data refresh ──────────────────────────────────────────────────────────
+async function refreshData() {
+  await Promise.all([
+    loadSolarData(),
+    loadAnomalies(),
+    loadEVSessions(),
+    loadECIS(),
+  ]);
+  document.getElementById('last-updated').textContent =
+    'Last updated: ' + new Date().toLocaleTimeString('en-SG');
+}
+
+// ── Solar chart ───────────────────────────────────────────────────────────
+async function loadSolarData() {
+  const res = await api(`/api/solar/${currentSiteId}/latest`);
+  if (!res || !res.ok) return;
+  const readings = await res.json();
+  if (!readings.length) return;
+
+  const latest = readings[readings.length - 1];
+  document.getElementById('kpi-power').innerHTML =
+    `${latest.power_kw?.toFixed(2) || '0.00'}<span class="kpi-unit">kW</span>`;
+  document.getElementById('kpi-pr').textContent =
+    `PR: ${((latest.performance_ratio || 0) * 100).toFixed(1)}% · Irr: ${latest.irradiance?.toFixed(2)} kWh/m²`;
+  document.getElementById('live-power').textContent =
+    `⚡ ${latest.power_kw?.toFixed(2)} kW live`;
+
+  // 30-day total from these readings (rough from last 48)
+  const totalKwh = readings.reduce((s, r) => s + (r.energy_kwh || 0), 0);
+  document.getElementById('kpi-kwh').innerHTML =
+    `${totalKwh.toFixed(1)}<span class="kpi-unit">kWh</span>`;
+
+  const labels = readings.map(r => {
+    const d = new Date(r.ts);
+    return d.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
+  });
+  const actualData = readings.map(r => r.power_kw || 0);
+  const expectedData = readings.map(r => r.expected_kw || 0);
+  const prData = readings.map(r => ((r.performance_ratio || 0) * 100));
+
+  // anomaly points
+  const anomalyPoints = readings.map(r =>
+    r.anomaly_flag ? (r.power_kw || 0) : null
+  );
+
+  // ── Solar chart ──
+  if (solarChart) {
+    solarChart.data.labels = labels;
+    solarChart.data.datasets[0].data = actualData;
+    solarChart.data.datasets[1].data = expectedData;
+    solarChart.data.datasets[2].data = anomalyPoints;
+    solarChart.update('none');
+  } else {
+    const ctx = document.getElementById('solar-chart').getContext('2d');
+    solarChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Actual (kW)',
+            data: actualData,
+            borderColor: '#1D9E75',
+            backgroundColor: 'rgba(29,158,117,0.08)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Expected (kW)',
+            data: expectedData,
+            borderColor: '#B4B2A9',
+            borderWidth: 1.5,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            tension: 0.4,
+            fill: false,
+          },
+          {
+            label: 'Anomaly',
+            data: anomalyPoints,
+            borderColor: '#E24B4A',
+            backgroundColor: '#E24B4A',
+            pointRadius: 6,
+            pointStyle: 'triangle',
+            showLine: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { font: { size: 12 }, boxWidth: 12 } } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8, font: { size: 11 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // ── PR chart ──
+  if (prChart) {
+    prChart.data.labels = labels;
+    prChart.data.datasets[0].data = prData;
+    prChart.update('none');
+  } else {
+    const ctx2 = document.getElementById('pr-chart').getContext('2d');
+    prChart = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Performance Ratio (%)',
+          data: prData,
+          backgroundColor: prData.map(v => v < 65 ? 'rgba(226,75,74,0.7)' : 'rgba(29,158,117,0.6)'),
+          borderRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 6, font: { size: 10 } }, grid: { display: false } },
+          y: { min: 0, max: 100, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+}
+
+// ── Anomalies ─────────────────────────────────────────────────────────────
+async function loadAnomalies() {
+  const res = await api(`/api/solar/${currentSiteId}/anomalies`);
+  if (!res || !res.ok) return;
+  const anomalies = await res.json();
+
+  document.getElementById('kpi-anomalies').textContent = anomalies.length;
+  const badge = document.getElementById('anomaly-badge');
+
+  if (!anomalies.length) {
+    document.getElementById('kpi-anomaly-last').textContent = 'All systems normal';
+    badge.style.display = 'none';
+    document.getElementById('anomaly-list').innerHTML =
+      '<li class="empty-state">No anomalies detected ✓</li>';
+    return;
+  }
+
+  badge.style.display = 'inline';
+  const last = new Date(anomalies[0].ts);
+  document.getElementById('kpi-anomaly-last').textContent =
+    'Last: ' + last.toLocaleString('en-SG', { dateStyle: 'short', timeStyle: 'short' });
+
+  const list = document.getElementById('anomaly-list');
+  list.innerHTML = anomalies.slice(0, 8).map(a => {
+    const ts = new Date(a.ts).toLocaleString('en-SG', { dateStyle: 'short', timeStyle: 'short' });
+    const drop = a.expected_kw ? Math.round((1 - a.power_kw / a.expected_kw) * 100) : 0;
+    return `<li class="anomaly-item">
+      <div class="severity-dot ${a.anomaly_severity}"></div>
+      <div>
+        <div><strong>${a.anomaly_severity}</strong> — ${drop}% below expected</div>
+        <div class="anomaly-ts">${ts} · ${a.power_kw?.toFixed(2)} kW actual / ${a.expected_kw?.toFixed(2)} kW expected</div>
+      </div>
+    </li>`;
+  }).join('');
+}
+
+// ── EV sessions ───────────────────────────────────────────────────────────
+async function loadEVSessions() {
+  const res = await api(`/api/ev/${currentSiteId}/sessions`);
+  if (!res || !res.ok) return;
+  const sessions = await res.json();
+
+  if (!sessions.length) {
+    document.getElementById('ev-container').innerHTML = '<div class="empty-state">No sessions yet</div>';
+    return;
+  }
+
+  const rows = sessions.slice(0, 10).map(s => {
+    const ts = new Date(s.start_ts).toLocaleString('en-SG', { dateStyle: 'short', timeStyle: 'short' });
+    return `<tr>
+      <td>${s.charger_id}</td>
+      <td>${ts}</td>
+      <td>${(s.energy_kwh || 0).toFixed(1)} kWh</td>
+      <td>SGD ${(s.revenue_sgd || 0).toFixed(2)}</td>
+      <td><span style="color:var(--green);font-weight:500">${s.status}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('ev-container').innerHTML = `
+    <table class="ev-table">
+      <thead><tr><th>Charger</th><th>Start</th><th>Energy</th><th>Revenue</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── ECIS ──────────────────────────────────────────────────────────────────
+async function loadECIS() {
+  const res = await api(`/api/solar/${currentSiteId}/ecis`);
+  if (!res || !res.ok) return;
+  const data = await res.json();
+
+  document.getElementById('kpi-ecis').textContent = data.credits_sgd?.toFixed(2);
+
+  document.getElementById('ecis-details').innerHTML = `
+    <div class="ecis-row"><span class="ecis-label">Total solar generated (30d)</span><span class="ecis-val">${data.total_solar_kwh} kWh</span></div>
+    <div class="ecis-row"><span class="ecis-label">Estimated exported (30%)</span><span class="ecis-val">${data.exported_kwh} kWh</span></div>
+    <div class="ecis-row"><span class="ecis-label">ECIS rate (SP Group)</span><span class="ecis-val">SGD ${data.ecis_rate}/kWh</span></div>
+    <div class="ecis-row" style="border-top:1px solid rgba(8,80,65,0.15);margin-top:6px;padding-top:6px">
+      <span class="ecis-label"><strong>Credits earned</strong></span>
+      <span class="ecis-val" style="font-size:18px">SGD ${data.credits_sgd}</span>
+    </div>`;
+}
+
+// ── Digest ────────────────────────────────────────────────────────────────
+async function loadDigest() {
+  document.getElementById('digest-modal').classList.add('open');
+  document.getElementById('digest-body').textContent = 'Generating digest with Gemini AI…';
+  const res = await api(`/api/digest/${currentSiteId}`);
+  if (!res || !res.ok) {
+    document.getElementById('digest-body').textContent = 'Failed to generate digest.';
+    return;
+  }
+  const data = await res.json();
+  document.getElementById('digest-body').textContent = data.digest;
+}
+
+// ── PDF ───────────────────────────────────────────────────────────────────
+async function downloadPDF() {
+  const res = await api(`/api/report/${currentSiteId}/pdf`);
+  if (!res || !res.ok) { alert('Failed to generate PDF'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `supercharge-report.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Fault injection ───────────────────────────────────────────────────────
+async function injectFault() {
+  if (!currentSiteId) return;
+  const res = await api(`/api/debug/inject-fault/${currentSiteId}`, { method: 'POST' });
+  if (res && res.ok) {
+    document.getElementById('chart-status').textContent = '⚠ FAULT INJECTED';
+    document.getElementById('chart-status').className = 'card-title-badge badge-red';
+    alert('Fault injected — solar output will drop 40-55% below expected. Watch for anomaly flags in the next 30s refresh.');
+  }
+}
+
+async function clearFault() {
+  if (!currentSiteId) return;
+  const res = await api(`/api/debug/clear-fault/${currentSiteId}`, { method: 'POST' });
+  if (res && res.ok) {
+    document.getElementById('chart-status').textContent = 'Live';
+    document.getElementById('chart-status').className = 'card-title-badge badge-green';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadSites();
+</script>
+</body>
+</html>
