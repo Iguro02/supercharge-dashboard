@@ -25,7 +25,7 @@ def generate_weekly_digest(site_name: str, client_name: str, data: dict) -> str:
         anomaly_details - string description of anomalies
         co2_kg          - CO2 saved (solar_kwh * 0.4233 kg/kWh SG grid factor)
     """
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     prompt = f"""You are the energy reporting assistant for SuperCharge SG, a Singapore clean energy company.
 
