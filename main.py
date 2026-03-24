@@ -29,12 +29,16 @@ scheduler = BackgroundScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Seed users on startup (safe — uses ON CONFLICT DO NOTHING logic in DB)
+    # Seed users on startup
     _seed_users()
+    # Fetch real Singapore irradiance from NASA POWER API
+    simulator.fetch_nasa_irradiance()
     # Start simulation every 30 seconds
     scheduler.add_job(simulator.run_simulation_tick, "interval", seconds=30, id="sim")
     # Retrain anomaly model every 10 minutes
     scheduler.add_job(anomaly.retrain_from_db, "interval", minutes=10, id="retrain")
+    # Refresh NASA data daily (irradiance changes by month)
+    scheduler.add_job(simulator.fetch_nasa_irradiance, "interval", hours=24, id="nasa")
     scheduler.start()
     # Initial tick immediately
     simulator.run_simulation_tick()
@@ -219,6 +223,18 @@ def clear_fault(site_id: str, org_id: str = Depends(auth.get_current_org)):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/api/nasa/irradiance")
+def nasa_irradiance():
+    """Returns the current NASA irradiance data being used by the simulator."""
+    return {
+        "source": "NASA POWER API",
+        "location": "Singapore (lat=1.3521, lon=103.8198)",
+        "monthly_avg_kwh_m2_day": simulator._NASA_MONTHLY_IRR,
+        "current_month": datetime.now(timezone.utc).month,
+        "current_baseline": simulator._NASA_MONTHLY_IRR.get(datetime.now(timezone.utc).month),
+    }
 
 
 # ── Static files (frontend) ───────────────────────────────────────────────────
