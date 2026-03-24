@@ -761,8 +761,19 @@ async function clearFault() {
   if (!currentSiteId) return;
   const res = await api(`/api/debug/clear-fault/${currentSiteId}`, { method: 'POST' });
   if (res && res.ok) {
+    // Reset chart badge
     document.getElementById('chart-status').textContent = 'Live';
     document.getElementById('chart-status').className = 'card-title-badge badge-green';
+    // Reset anomaly badge
+    document.getElementById('anomaly-badge').style.display = 'none';
+    // Reset anomaly log
+    document.getElementById('anomaly-list').innerHTML =
+      '<li class="empty-state">No anomalies detected ✓</li>';
+    // Reset KPI
+    document.getElementById('kpi-anomalies').textContent = '0';
+    document.getElementById('kpi-anomaly-last').textContent = 'All systems normal';
+    // Refresh all data immediately
+    await refreshData();
   }
 }
 
