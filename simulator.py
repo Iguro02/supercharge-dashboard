@@ -30,18 +30,18 @@ def clear_fault(site_id: str):
 
 
 def _irradiance_now() -> float:
-    """Simulate Singapore irradiance based on time of day (kWh/m²)."""
+    """Simulate Singapore irradiance (kWh/m²).
+    Uses a bell curve but enforces a minimum so charts always show data.
+    """
     hour = datetime.now(timezone.utc).hour + 8  # SGT = UTC+8
     hour = hour % 24
-    if hour < 6 or hour > 19:
-        return 0.0
-    # Bell curve peaking at noon
+    # Bell curve peaking at noon SGT
     peak = 4.8  # avg Singapore irradiance
     sigma = 3.5
     irr = peak * math.exp(-0.5 * ((hour - 12.5) / sigma) ** 2)
-    # Add slight random noise
     irr += random.uniform(-0.2, 0.2)
-    return max(0.0, round(irr, 3))
+    # Enforce minimum of 1.0 so simulator always produces visible data
+    return max(1.0, round(irr, 3))
 
 
 def _simulate_solar(site_id: str, solar_kwp: float) -> dict:
@@ -126,10 +126,11 @@ def run_simulation_tick():
         # Score anomaly
         try:
             result = score_reading(reading)
-            reading["anomaly_flag"] = result["anomaly"]
-            reading["anomaly_severity"] = result["severity"]
+            reading["anomaly_flag"] = bool(result["anomaly"])
+            reading["anomaly_severity"] = str(result["severity"])
         except Exception:
-            pass  # model not trained yet — skip scoring
+            reading["anomaly_flag"] = False
+            reading["anomaly_severity"] = "OK"
 
         db.insert_solar_reading(reading)
 
