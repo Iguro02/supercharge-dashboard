@@ -4,7 +4,7 @@
 ---
 
 ## Live URL
-(https://supercharge-dashboard-production-f3f5.up.railway.app/login.html)
+> https://supercharge-dashboard-production-f3f5.up.railway.app/login.html
 
 ## Demo Credentials
 | Account | Email | Password | Sites |
@@ -27,10 +27,11 @@ FastAPI (Python 3.11)
 ├── /api/ev/:id/*       → EV sessions
 ├── /api/digest/:id     → Gemini AI weekly digest
 ├── /api/report/:id/pdf → ReportLab monthly PDF
+├── /api/nasa/irradiance → NASA data status
 └── /api/debug/*        → fault inject (eval only)
         │
         ├── Supabase (PostgreSQL) — multi-tenant data store
-        ├── APScheduler — sim tick every 30s, retrain every 10min
+        ├── APScheduler — sim tick every 30s, retrain every 10min, NASA refresh every 24h
         ├── Isolation Forest (scikit-learn) — anomaly detection
         └── Gemini 1.5 Flash — weekly digest generation
 ```
@@ -54,7 +55,7 @@ All queries are scoped by `org_id` from the JWT. Cross-tenant access returns **H
 
 ## Anomaly Detection Methodology
 
-**Model**: scikit-learn `IsolationForest` (contamination=0.05)
+**Model**: scikit-learn `IsolationForest` (contamination=0.02)
 
 **Features used**:
 - `performance_ratio` — actual/expected output ratio
@@ -62,17 +63,24 @@ All queries are scoped by `org_id` from the JWT. Cross-tenant access returns **H
 - `temp_c` — panel temperature
 - `irradiance` — solar irradiance (kWh/m²)
 
-**Flagging logic**:
-1. If irradiance < 0.3 kWh/m² → skip (nighttime)
-2. If actual output < 85% of expected → flag (rule-based, always reliable)
-3. Isolation Forest scores remaining readings → flag outliers
+**Flagging logic** (layered — rule-based first, ML second):
+1. If irradiance < 0.1 kWh/m² → skip (essentially no sunlight)
+2. If drop > 35% below expected → flag CRITICAL immediately (rule-based)
+3. If drop > 20% below expected → flag WARNING immediately (rule-based)
+4. If drop > 15% AND Isolation Forest also flags it → flag WARNING (ML-assisted)
+5. Otherwise → OK
 
 **Severity**:
 - `CRITICAL` — drop > 35% below expected
-- `WARNING` — drop 15–35% below expected
-- `OK` — normal operation
+- `WARNING` — drop 20–35% below expected
+- `OK` — normal operation (includes natural ±8% variation)
 
-**False positive mitigation**: Nighttime readings are excluded. Model is retrained every 10 minutes on the latest 500 readings.
+**False positive mitigation**:
+- Threshold set at 20% (not 15%) to avoid flagging normal day-to-day variation
+- ML model only fires as a secondary check, never independently
+- `contamination=0.02` means only the most extreme 2% of readings are flagged
+- Model requires minimum 20 readings before training activates
+- Model retrains every 10 minutes on the latest 500 readings
 
 ---
 
@@ -104,53 +112,30 @@ Source: Section B3 of SuperCharge SG Knowledge Base. Rate verified against SP Gr
 
 ## NASA POWER API Integration
 
-Solar irradiance baseline uses the simulator with Singapore coordinates:
-- Latitude: 1.3521, Longitude: 103.8198
-- Expected daily peak: 4.5–5.2 kWh/m²/day
-- PR (Performance Ratio): 0.75–0.82
+Irradiance baseline is fetched live from NASA POWER API on every server startup and refreshed every 24 hours.
 
-For production, replace `simulator._irradiance_now()` with live NASA API data:
+- **Endpoint**: `https://power.larc.nasa.gov/api/temporal/monthly/point`
+- **Location**: Singapore — Latitude: 1.3521, Longitude: 103.8198
+- **Parameter**: `ALLSKY_SFC_SW_DWN` (surface solar irradiance, kWh/m²/day)
+- **Years averaged**: 2020–2023
+- **PR (Performance Ratio)**: 0.75–0.82 (typical Singapore install)
+
+Monthly averages are used to scale the irradiance bell curve for the current month, so the simulation reflects real seasonal variation in Singapore's solar output (lowest in Nov/Dec, highest in Mar/Apr).
+
+To verify NASA data is loaded on your live deployment:
 ```
-https://power.larc.nasa.gov/api/temporal/monthly/point
-?parameters=ALLSKY_SFC_SW_DWN&community=RE
-&longitude=103.8198&latitude=1.3521&start=2024&end=2024&format=JSON
+GET /api/nasa/irradiance
 ```
+
+If the NASA API is unreachable, the simulator falls back to hardcoded Singapore averages silently.
 
 ---
 
-## Local Setup
+## Deployment
 
-```bash
-git clone <your-repo>
-cd supercharge-dashboard
-pip install -r requirements.txt
-cp .env.example .env
-# Fill in SUPABASE_URL, SUPABASE_KEY, JWT_SECRET, GEMINI_API_KEY
-```
+Deployed on **Railway Hobby plan** — server runs continuously with no idle spindown, ensuring the simulator ticks every 30 seconds reliably and data accumulates in Supabase without interruption.
 
-Run Supabase schema:
-- Go to your Supabase project → SQL Editor
-- Paste and run the contents of `schema.sql`
-
-```bash
-uvicorn main:app --reload --port 8000
-# Visit http://localhost:8000/login.html
-```
-
----
-
-## Railway Deployment
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-railway login
-railway init
-railway up
-# Add env vars in Railway dashboard → Variables
-```
-
-Required environment variables:
+Required environment variables set in Railway dashboard:
 ```
 SUPABASE_URL=
 SUPABASE_KEY=
@@ -167,7 +152,7 @@ GEMINI_API_KEY=
 3. Click **"⚠ Inject Fault"** button
 4. Wait 30 seconds (one simulation tick)
 5. The anomaly log will show a **CRITICAL** entry with actual vs expected output
-6. The chart will show a red triangle marker at the anomaly point
+6. The solar chart will show a red triangle marker at the anomaly point
 7. Click **"✓ Clear Fault"** to restore normal operation
 
 ---
@@ -175,6 +160,5 @@ GEMINI_API_KEY=
 ## Known Limitations
 
 - ECIS export % is estimated at 30% (typical for SG); a production system would read from a smart meter
-- NASA POWER API is not called live in the simulator — irradiance is modelled by time-of-day curve
-- Email delivery for weekly digest requires SMTP config; digest text is returned via API and displayed in modal
-- Anomaly model requires ~10 readings before it trains (fills in ~5 minutes of simulation)
+- Email delivery for weekly digest requires SMTP config; digest text is returned via API and displayed in modal for the evaluator to copy
+- Anomaly ML model requires ~20 readings before training activates (approximately 10 minutes after first startup); rule-based thresholds fire immediately from the first reading
