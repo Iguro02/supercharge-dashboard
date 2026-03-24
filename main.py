@@ -217,6 +217,15 @@ def clear_fault(site_id: str, org_id: str = Depends(auth.get_current_org)):
     if not site:
         raise HTTPException(status_code=403, detail="Access denied")
     simulator.clear_fault(site_id)
+    # Also clear anomaly records from DB so the log resets visually
+    try:
+        db.get_db().table("solar_readings") \
+            .update({"anomaly_flag": False, "anomaly_severity": "OK"}) \
+            .eq("site_id", site_id) \
+            .eq("anomaly_flag", True) \
+            .execute()
+    except Exception as e:
+        print(f"[ClearFault] Could not reset anomaly records: {e}")
     return {"status": "fault cleared", "site_id": site_id}
 
 
