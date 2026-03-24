@@ -4,7 +4,7 @@
 ---
 
 ## Live URL
-> Replace with your Railway deployment URL after deploy
+> [Replace with your Railway deployment URL after deploy](https://supercharge-dashboard-production-f3f5.up.railway.app/login.html)
 
 ## Demo Credentials
 | Account | Email | Password | Sites |
