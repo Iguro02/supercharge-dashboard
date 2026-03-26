@@ -781,19 +781,12 @@ async function clearFault() {
   if (!currentSiteId) return;
   const res = await api(`/api/debug/clear-fault/${currentSiteId}`, { method: 'POST' });
   if (res && res.ok) {
-    // Reset chart badge
+    // Reset chart badge only — anomaly log stays intact (history is real)
     document.getElementById('chart-status').textContent = 'Live';
     document.getElementById('chart-status').className = 'card-title-badge badge-green';
-    // Reset anomaly badge
-    document.getElementById('anomaly-badge').style.display = 'none';
-    // Reset anomaly log
-    document.getElementById('anomaly-list').innerHTML =
-      '<li class="empty-state">No anomalies detected ✓</li>';
-    // Reset KPI
-    document.getElementById('kpi-anomalies').textContent = '0';
-    document.getElementById('kpi-anomaly-last').textContent = 'All systems normal';
-    // Refresh all data immediately
+    // Refresh data — anomaly log will show historical anomalies correctly
     await refreshData();
+    alert('Fault cleared. New readings will be normal. Past anomalies remain in log as history.');
   }
 }
 
